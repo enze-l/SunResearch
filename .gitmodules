@@ -1,0 +1,6 @@
+[submodule "SunControl"]
+	path = SunControl
+	url = https://github.com/enze-l/SunControl
+[submodule "SunNode/SunNode"]
+	path = SunNode/SunNode
+	url = https://github.com/enze-l/SunNode
