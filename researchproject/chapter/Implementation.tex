@@ -1,0 +1,52 @@
+\chapter{Implementierung}
+
+\section{Hardware}
+
+\subsection{Implementierung Beleuchtungshardware}
+Das Design von Matthew Perks wurde für die Umsetzung der Beleuchtung modifiziert. Die Lichtquelle stellt in diesem Projekt eine 100w LED mit einem CRI-Index von 95 und einem Kelvinwert von 5600 dar. Das abgegebene Licht entspricht in der Helligkeit, Qualität und Farbe in etwa Morgenlicht. Diese LED wird von einem 300w starken, gebrauchten CPU Kühler bei einer Arbeitstemperatur von unter 60 gehalten. Dieser überdimensionierte Kühler wurde aus dem Grund gewählt, dass der verbaute Lüfter sich bei einer relativ geringen Last nur langsam drehen muss und damit leise operiert. Die LED mit Kühler wurde anstelle der Antenne an eine gebrauchte Satellitenschüssel montiert. Die Satellitenschüssel wurde mit Spiegelfolie ausgelegt und wurde damit zu einem Parabolspiegel konvertiert. Mit ihm werden die Strahlen der LED parallel ausgerichtet. Da die LED einen Abstrahlwinkel von fast 180 Grad besitzt, wurde zudem ein Reflektor zur Fokussierung der Strahlen auf den Spiegel verbaut, um nicht zu viel Strahlungsverluste zu haben. Die Stromversorgung wird durch ein 36v AC-DC Netzteil gewährleistet. Damit die LED ihre benötigten 38v erhält, wird der Strom durch ein Step-UP-Modul auf die entsprechende Spannung angehoben. Auch für die Steuerung der Lüfter, die LED und Netzteil kühlen, musste der Strom gewandelt werden. Hierfür wurde ein Step-Down Modul verwendet, welches die Spannung auf 5v herunter wandelt. Dies resultiert in eine konstant niedrige Drehzahl der Lüfter.
+
+\subsection{Implementierung Steuerungshardware}
+
+Um die Beleuchtungshardware drahtlos ansteuern zu können, benötigt es weitere Hardware. Die Wahl eines entsprechenden Mikrocontroller fiel, durch Raten von Pro. Dr. A. Huhn, auf den esp32. Dieser bringt unter anderem die Möglichkeit der Kommunikation via Wifi, die Unterstützung von Mikropyhton, einfache Programmierbarkeit über ein USB-Interface und diverse Optionen zur Stromversorgung mit sich. Nicht zuletzt durch seinen niedrigen Preis stellt er durch seinen Funktionsreichtum eine ideale Option für diese Projekt dar. Die Stromversorgung des Mikrocontroller kann glücklicherweise von dem selben Step-Down Modul übernommen werden, das auch die Lüfter betreibt. Dies ist möglich, da das gewählte ESP-Bord durch die Implementierung eines USB-Interfaces mit internem Step-Down Wandler, nicht nur eine Betriebsspannung von 3,3v, sondern auch 5v-10v unterstützt. Intern nutzt dieses Board jedoch 3,3 für die Signalweitergabe und um seine I/O-Pins zu betreiben. Dies ist viel zu gering um die genutzte LED zu betreiben. Aus diesem Grund muss eine weitere Komponente für die Steuerung der Lampe genutzt werden. Hierzu wird ein Relais verwendet, das mit einer Spannung von 3,3v angesteuert werden kann und 300w Leistung verträgt. Ein weiteres wird für die Steuerung der Lüfter verwendet. Zuletzt braucht der esp32 noch die Möglichkeit die Lichtintensität zu messen. Hierfür wurde ein Lichtsensor verwendet, der über ein I2C-Interface kommuniziert und die Intensität in LUX misst.
+
+\section{Software}
+Die Implementierung des Konzepts wurde zunächst anhand von atomaren Prototypen iterativ vorangetrieben. Später flossen diese Erfahrung im Endprodukt zusammen. Dabei spaltet sich dieser Schritt in die Android- und die Micropython-Entwicklung auf. Der Arbeitstitel für die Android-App ist \glqq SunControl\grqq{} und für den Python-Code \glqq SunNode\grqq{}.
+
+
+\subsection{Implementierung SunControl}
+Die Android-Applikation ist sehr simpel gehalten. Die Anzeige wird von einer einzelnen Aktivität übernommen. Diese implementiert ein Interface namens \glqq Displayable\grqq{}, das zur Anzeige aller relevanten Parameter genutzt werden kann. Der \glqq CommunicationHandler\grqq{} wird für die Verarbeitung von ein- und ausgehender Kommunikation genutzt.
+
+Eine Verbindung wird nach Bedarf vom CommunicationHandler über ein \glqq SimpleConnection\grqq{}-Object gestarted. Diesem werden alle nötigen Parameter für eine Anfrage, wie die Nachricht, IP und Port der SunNode und ein observierbarer String, übergeben. Über letzteren wird via dem Observer-Pattern die Antwort der SunNode behandelt. Jedes SimpleConnectionObject eröffnet für die Anfrage einen neuen Thread und terminiert nach Erhalten der Antwort wieder. Damit nicht jedes mal die IP der SunNode neu eingegeben werden muss, wird diese vom CommunicationHandler über den \glqq PreferenceManger\grqq{} des Android-Frameworks persistent gespeichert und bei einem Neustart wiederhergestellt.
+
+Um den Graphen darzustellen wurde eine Bibliothek namens \glqq GraphView\grqq{} verwendet. Diese verlangt das Setzen von Maximalwerten auf der X- und Y-Achse. Um Messpunkte anzeigen zu können, müssen sie als \glqq LineGraphSeries\grqq{} vorliegen. Jeder \glqq DataPoint\grqq{} in dieser Serie verfügt über einen x- und z-Wert. Die Funktion \glqq displayGraph(List<Doubel> list)\grqq{} nimmt die Konvertierung von einem eindimensionalen Array zu solchen Werten vor und teilt die Übergebenen Werte chronologisch auf der X-Achse auf.
+
+Damit die Zeitpunkte für das Ein- und Ausschalten, sowie das kritische Lichtlevel eingestellt werden können, wurden Slider verwendet. Google biete mit \glqq Material Components\grqq{} eine eigene Implementierung dieser an. Um auf Veränderungen ihrer Position reagieren zu können, muss das OnSliderTouchListener Interface implementiert werden. \glqq OnTimeSliderTouchListener\grqq{} und \glqq OnLightSliderTouchListener\grqq{} stellen die jeweiligen konkreten Implementierungen dafür da. Um dem Nutzer beim Verstellen der Zeit den richtigen Zeitpunkt in Form eines Labels anzeigen zu können, wurde zudem ein \glqq TimelabelFormatter\grqq{} auf Basis des \glqq LabelFormatter\grqq{} Interfaces implementiert. Diese Implementierung konvertiert in ihrer einzigen Methode die Dezimalwerte des Zahlenstrahles in eine konventionelle Uhrzeit um.
+
+\subsection{Implementierung SunNode}
+Die SunNode besteht aus fünf grundlegenden Komponenten. Standardmäßig existieren in dem Verzeichnis des esp32 schon \glqq boot\grqq{} und \glqq main\grqq{} wobei main bei Stromzufuhr automatisch gestartet wird. Aus diesem Grund werden hier die fünf Komponenten nach ihren Abhängigkeiten chronologisch initialisiert:
+
+\begin{lstlisting}[caption={Initialisierungen in main}, captionpos=b, label={lst:tf_graph_save}]
+controller = Controller()
+lightsensor = LightSensor()
+protocol_machine = ProtocolMachine(controller, lightsensor)
+networking = Networking(protocol_machine)
+scheduler = Scheduler(controller, lightsensor)
+\end{lstlisting}
+
+Wie im vorhergehenden Codeausschnitt zu sehen, haben \glqq networking\grqq{} und \glqq scheduler\grqq{} beide direkt oder indirect zugriff auf \glqq controller\grqq{} und \glqq light\_sensor\grqq{}. Scheduler und networking starten beide Threads von denen nach der Initialisierung der Klassen alle weiteren Methodenaufrufe ausgehen.
+
+Networking ist der Einstiegspunkt für Kommunikation. Bei der Initialisierung stellt er zunächst, anhand der SSID des Netzwerk und des Passworts, die in entsprechenden Dateien gespeichert sind, eine Netzwerkverbindung her. Zudem synchronisiert er die interne Uhr via NTP. Danach hört er auf Port 50000 auf eine Anfrage. Wenn er eine Anfrage bekommt, leitet er sie an protocol\_machine weiter. Diese verarbeitet die Anfrage und gibt eine Antwort zurück. Nachdem diese Antwort zurück an dem Anfragenden geschickt wurde, wird die Verbindung getrennt und der Port kehrt wieder in den wartenden Zustand zurück.
+
+Die protocol\_machine hat zwei grundlegende Aufgaben. Zum einen interpretiert sie die eingehende Anfrage und entscheidet, welche Aktion der controller ausführen soll. Zum anderen gibt sie in jedem Fall eine Antwort zurück. Diese besteht aus allen relevanten Informationen, die zur Anzeige des Status der SunNode gebraucht werden. Denn nach jeder Anfrage könnten sich diese Informationen durch neue Konfigurationen geändert haben und werden deswegen für die Synchronisation der Anzeigen der SunControl benötigt. In jedem Fall werden sowohl Daten von dem controller, als auch dem light\_sensor angefordert.
+
+Light\_sensor stellt die Schnittstelle zum Lichtsensor dar und sammelt Daten zum aktuellen und vorhergehenden Tag. Dazu zählen alle gesammelten Lichtmesspunkte in diesen Zeiträumen und der insgesamte Höchstwert. Der Höchstwert ist deswegen wichtig, da anhand von ihm die y-Achse des Graphen der SunControll skaliert wird. Wenn die Daten des letzten Tages angefordert werden, jedoch noch kein kompletter Tag seit dem ersten Messpunkt vergangen ist, werden die bisher gesammelten Messpunkte zurück gegeben. Dies geschieht, um trotz unvollständiger Informationen, dem Nutzer einen Orientierungspunkt für Einstellungen bieten zu können.
+
+Der Controller steuert das physikalische Licht. Er stellt zudem die Datenbasis für alle notwendigen Parameter, die bei Anfragen oder einer Änderung des Lichtlevels für die Bewertung der Situation nötig sind. Alle Parameter, die über SunControll gesetzt werden, sind hier gespeichert. Zudem wird der letzte Messpunkt des light\_sensor hier hinterlegt, um gegebenenfalls außerhalb der Messintervalle auf ihn zugreifen zu können.
+
+Die letzte Komponente ist scheduler. Sie ist Taktgeber zur Messung und löst alle autonomen Events aus. Alle 15 Minuten lässt sie den light\_sensor eine Messung ausführen und gibt das Ergebnis an den controller weiter, der je nach Wert und Einstellungen entsprechend reagiert. Das Intervall von 15 Minuten wurde deswegen gewählt, da es noch eine realistisch feine Abstufung zur Einstellung von Weckzeiten darstellt. Feinere Werte haben in Testläufen dazu geführt, dass der interne Speicher des Mikrocontrollers nicht mehr für die Speicherung aller Werte des Tages ausgereicht hat und das Programm deswegen abstürzte. 15 Minuten ist ein Kompromiss zwischen ausreichender Einstellungsgranularität und dieser Hardwarelimitierung. Eine tiefere Ausführung dazu folgt im nächsten Kapitel. 
+
+
+
+
+
+
